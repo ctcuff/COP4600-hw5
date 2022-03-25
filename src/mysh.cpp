@@ -262,6 +262,11 @@ void parseCommand(
     }
 
     if (command == "repeat") {
+        if (args.size() < 2) {
+            std::cerr << "mysh: Usage: repeat [repetitions] [command]" << std::endl;
+            return;
+        }
+
         executeRepeatCommand(args);
     }
 
@@ -447,12 +452,6 @@ bool terminateProcess(const pid_t pid) {
 }
 
 void executeRepeatCommand(const std::vector<std::string>& args) {
-    if (args.size() < 2) {
-        std::cerr << "mysh: Usage: repeat [repetitions] [command]" << std::endl;
-        return;
-    }
-
-    int repetitions;
     std::vector<std::string> command = std::vector<std::string>(args.begin() + 1, args.end());
 
     if (!Util::isValidNumber(args[0])) {
@@ -460,7 +459,7 @@ void executeRepeatCommand(const std::vector<std::string>& args) {
         return;
     }
 
-    repetitions = atoi(args[0].c_str());
+    int repetitions = atoi(args[0].c_str());
 
     for (int i = 0; i < repetitions; i++) {
         executeStartCommand(command, true);
