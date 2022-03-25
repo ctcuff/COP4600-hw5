@@ -7,6 +7,7 @@
 #include <set>
 #include <sstream>
 #include <stdexcept>
+#include <stdlib.h>
 #include <string.h>
 #include <string>
 #include <sys/stat.h>
@@ -172,6 +173,15 @@ namespace Util {
 
         return history;
     }
+
+    bool isValidNumber(std::string input) {
+        for (int i = 0; i < static_cast<int>(input.size()); i++) {
+            if (isdigit(input[i]) == 0) {
+                return false;
+            }
+        }
+        return true;
+    }
 }
 
 int main() {
@@ -261,12 +271,10 @@ void parseCommand(
             return;
         }
 
-        try {
-            executeReplayCommand(history, std::stoi(args[0]));
-        } catch (const std::invalid_argument& err) {
+        if (!Util::isValidNumber(args[0])) {
             std::cerr << "mysh: Argument must be a number" << std::endl;
-        } catch (const std::out_of_range& err) {
-            std::cerr << "mysh: Argument out of range" << std::endl;
+        } else {
+            executeReplayCommand(history, atoi(args[0].c_str()));
         }
     }
 
@@ -276,16 +284,15 @@ void parseCommand(
             return;
         }
 
-        try {
-            pid_t pid = std::stoi(args[0]);
-
-            if (terminateProcess(pid)) {
-                activePids.erase(pid);
-            }
-        } catch (const std::invalid_argument& err) {
+        if (!Util::isValidNumber(args[0])) {
             std::cerr << "mysh: Argument must be a number" << std::endl;
-        } catch (const std::out_of_range& err) {
-            std::cerr << "mysh: Argument out of range" << std::endl;
+            return;
+        }
+
+        pid_t pid = atoi(args[0].c_str());
+
+        if (terminateProcess(pid)) {
+            activePids.erase(pid);
         }
     }
 
@@ -387,7 +394,7 @@ void executeStartCommand(const std::vector<std::string>& args, bool background) 
         programArgs[i] = args[i].c_str();
     }
 
-    programArgs[args.size()] = nullptr;
+    programArgs[args.size()] = NULL;
 
     pid_t pid = fork();
 
@@ -448,15 +455,12 @@ void executeRepeatCommand(const std::vector<std::string>& args) {
     int repetitions;
     std::vector<std::string> command = std::vector<std::string>(args.begin() + 1, args.end());
 
-    try {
-        repetitions = std::stoi(args[0]);
-    } catch (const std::invalid_argument& err) {
+    if (!Util::isValidNumber(args[0])) {
         std::cerr << "mysh: Argument [repetitions] must be a number" << std::endl;
         return;
-    } catch (const std::out_of_range& err) {
-        std::cerr << "mysh: Argument [repetitions] out of range" << std::endl;
-        return;
     }
+
+    repetitions = atoi(args[0].c_str());
 
     for (int i = 0; i < repetitions; i++) {
         executeStartCommand(command, true);
@@ -540,8 +544,8 @@ void copyFileToFile(std::string source, std::string dest) {
         std::ofstream destFile;
         std::string content;
 
-        sourceFile.open(source);
-        destFile.open(dest);
+        sourceFile.open(source.c_str());
+        destFile.open(dest.c_str());
 
         if (sourceFile.is_open() && destFile.is_open()) {
             while (std::getline(sourceFile, content, '\n')) {
