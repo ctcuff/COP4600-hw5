@@ -1,17 +1,20 @@
 #include <cerrno>
+#include <csignal>
 #include <cstring>
 #include <fstream>
 #include <iostream>
-#include <csignal>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include <set>
 #include <vector>
 
-#define HISTORY_FILE_PATH "./mysh.history"
+#define HISTORY_FILE_NAME "mysh.history"
+#define HISTORY_FILE_PATH "./" HISTORY_FILE_NAME
 
 std::set<pid_t> activePids;
 std::set<std::string> VALID_COMMANDS;
@@ -19,8 +22,7 @@ std::set<std::string> VALID_COMMANDS;
 void parseCommand(
     const std::string& command,
     const std::vector<std::string>& args,
-    const std::vector<std::string>& history
-);
+    const std::vector<std::string>& history);
 
 // If no arguments are passed, this prints all history (current application history plus the
 // history saved in mysh.history). If "-c" is passed, all history will be cleared (including
@@ -44,8 +46,23 @@ bool terminateProcess(pid_t pid);
 
 void terminateAllProcesses();
 
+// Takes a path name and check if that path is a file or directory. If the path
+// is a file, this function will print `Dwelt indeed`. If the path a directory,
+// this function will print `Abode is`. If the path doesn't exist, this function
+// will print `Dwelt not`.
+void checkFileOrDirectory(std::string path);
+
+// Takes a file name, creates that file, and writes the word `Draft` into it.
+// If the file already exists, this will print an error.
+void createAndWriteToFile(std::string filename);
+
+// Takes the path to a source file and copies the contents to the dest file.
+// If the source file doesn't exist, or the destinations's directory doesn't
+// exist, this will print an error.
+void copyFileToFile(std::string source, std::string dest);
+
 namespace Util {
-    bool isStringEmpty(std::string string) {
+    bool isStringEmpty(std::string& string) {
         if (string.empty()) {
             return true;
         }
@@ -55,6 +72,7 @@ namespace Util {
                 return false;
             }
         }
+
         return true;
     }
 
@@ -72,8 +90,32 @@ namespace Util {
         return tokens;
     }
 
-    bool doesFileExist(const std::string& path) {
+    bool doesFileOrDirExist(const std::string& path) {
         return access(path.c_str(), F_OK) != -1;
+    }
+
+    bool isFile(const std::string& path) {
+        if (!Util::doesFileOrDirExist(path)) {
+            return false;
+        }
+
+        struct stat pathStat;
+
+        stat(path.c_str(), &pathStat);
+
+        return S_ISREG(pathStat.st_mode) == 1;
+    }
+
+    bool isDirectory(const std::string& path) {
+        if (!Util::doesFileOrDirExist(path)) {
+            return false;
+        }
+
+        struct stat pathStat;
+
+        stat(path.c_str(), &pathStat);
+
+        return S_ISDIR(pathStat.st_mode) == 1;
     }
 
     int writeHistory(const std::vector<std::string>& history) {
@@ -87,7 +129,10 @@ namespace Util {
                 }
             }
 
-            std::cout << "mysh: History saved to " << HISTORY_FILE_PATH << std::endl;
+            char cwd[512];
+            getcwd(cwd, sizeof(cwd));
+
+            std::cout << "mysh: History saved to " << cwd << "/" << HISTORY_FILE_NAME << std::endl;
             file.close();
         } catch (const std::exception& err) {
             std::cout << "mysh: Error writing to history file " << err.what() << std::endl;
@@ -121,7 +166,11 @@ namespace Util {
 int main() {
     VALID_COMMANDS.insert("background");
     VALID_COMMANDS.insert("byebye");
+    VALID_COMMANDS.insert("coppy");
+    VALID_COMMANDS.insert("dwelt");
     VALID_COMMANDS.insert("history");
+    VALID_COMMANDS.insert("maik");
+    VALID_COMMANDS.insert("movetodir");
     VALID_COMMANDS.insert("repeat");
     VALID_COMMANDS.insert("replay");
     VALID_COMMANDS.insert("start");
@@ -158,8 +207,7 @@ int main() {
 void parseCommand(
     const std::string& command,
     const std::vector<std::string>& args,
-    const std::vector<std::string>& history
-) {
+    const std::vector<std::string>& history) {
 
     if (VALID_COMMANDS.find(command) == VALID_COMMANDS.end()) {
         std::cerr << "mysh: " << command << ": command not found" << std::endl;
@@ -224,6 +272,34 @@ void parseCommand(
     if (command == "terminateall") {
         terminateAllProcesses();
     }
+
+    if (command == "movetodir") {
+        // TODO
+    }
+
+    if (command == "dwelt") {
+        if (args.size() < 1) {
+            std::cerr << "mysh: Missing argument [file | directory]" << std::endl;
+        } else {
+            checkFileOrDirectory(args[0]);
+        }
+    }
+
+    if (command == "maik") {
+        if (args.size() < 1) {
+            std::cerr << "mysh: Missing argument [filename]" << std::endl;
+        } else {
+            createAndWriteToFile(args[0]);
+        }
+    }
+
+    if (command == "coppy") {
+        if (args.size() < 2) {
+            std::cerr << "mysh: Usage: coppy [source] [destination]" << std::endl;
+        } else {
+            copyFileToFile(args[0], args[1]);
+        }
+    }
 }
 
 void executeHistoryCommand(std::vector<std::string>& history, const std::vector<std::string>& args) {
@@ -266,14 +342,14 @@ void executeReplayCommand(const std::vector<std::string>& history, const int ind
 
 void executeStartCommand(const std::vector<std::string>& args, bool background) {
     // Check if the file exists before running, so we don't unnecessarily fork
-    if (!Util::doesFileExist(args[0])) {
+    if (!Util::doesFileOrDirExist(args[0])) {
         std::cerr << "mysh: " << args[0] << ": No such file or directory" << std::endl;
         return;
     }
 
     // execv ony takes a char** array, so we need to convert the string vector
     // arguments to a char** array
-    const char** programArgs = new const char* [args.size() + 1];
+    const char** programArgs = new const char*[args.size() + 1];
 
     for (int i = 0; i < static_cast<int>(args.size()); i++) {
         programArgs[i] = args[i].c_str();
@@ -373,4 +449,77 @@ void terminateAllProcesses() {
               << numPids
               << (numPids == 1 ? " process" : " processes")
               << std::endl;
+}
+
+void checkFileOrDirectory(std::string path) {
+    if (!Util::doesFileOrDirExist(path)) {
+        std::cout << "mysh: Dwelt not." << std::endl;
+    } else if (Util::isFile(path)) {
+        std::cout << "mysh: Dwelt indeed" << std::endl;
+    } else if (Util::isDirectory(path)) {
+        std::cout << "mysh: Abode is." << std::endl;
+    }
+}
+
+void createAndWriteToFile(std::string filename) {
+    if (Util::doesFileOrDirExist(filename)) {
+        std::cerr << "mysh: " << filename << " already exists." << std::endl;
+        return;
+    }
+
+    char cwd[512];
+    getcwd(cwd, sizeof(cwd));
+
+    try {
+        std::ofstream file;
+        file.open(filename.c_str());
+        file << "Draft\n";
+        file.close();
+
+        std::cout << "mysh: File saved to " << cwd << "/" << filename << std::endl;
+    } catch (const std::exception& err) {
+        std::cout << "mysh: Error writing to " << filename << " " << err.what() << std::endl;
+    }
+}
+
+void copyFileToFile(std::string source, std::string dest) {
+    if (!Util::doesFileOrDirExist(source)) {
+        std::cerr << "mysh: Source file " << source << " doesn't exist" << std::endl;
+        return;
+    }
+
+    if (Util::isDirectory(source)) {
+        std::cerr << "mysh: " << source << " is a directory" << std::endl;
+        return;
+    }
+
+    if (Util::isDirectory(dest)) {
+        std::cerr << "mysh: " << dest << " is already a directory" << std::endl;
+        return;
+    }
+
+    if (Util::isFile(dest)) {
+        std::cerr << "mysh: " << dest << " is already a file" << std::endl;
+        return;
+    }
+
+    try {
+        std::ifstream sourceFile;
+        std::ofstream destFile;
+        std::string content;
+
+        sourceFile.open(source);
+        destFile.open(dest);
+
+        if (sourceFile.is_open() && destFile.is_open()) {
+            while (std::getline(sourceFile, content, '\n')) {
+                destFile << content << "\n";
+            }
+        }
+
+        destFile.close();
+        sourceFile.close();
+    } catch (const std::exception& err) {
+        std::cout << "mysh: Error copying file: " << err.what() << std::endl;
+    }
 }
