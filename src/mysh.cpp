@@ -1,11 +1,13 @@
 #include <cerrno>
 #include <csignal>
 #include <cstring>
+#include <dirent.h>
 #include <fstream>
 #include <iostream>
 #include <set>
 #include <sstream>
 #include <stdexcept>
+#include <string.h>
 #include <string>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -15,6 +17,7 @@
 
 #define HISTORY_FILE_NAME "mysh.history"
 #define HISTORY_FILE_PATH "./" HISTORY_FILE_NAME
+#define MAX_PATH_LENGTH 512
 
 std::set<pid_t> activePids;
 std::set<std::string> VALID_COMMANDS;
@@ -46,7 +49,7 @@ bool terminateProcess(pid_t pid);
 
 void terminateAllProcesses();
 
-// Takes a path name and check if that path is a file or directory. If the path
+// Takes a path and checks if that path is a file or directory. If the path
 // is a file, this function will print `Dwelt indeed`. If the path a directory,
 // this function will print `Abode is`. If the path doesn't exist, this function
 // will print `Dwelt not`.
@@ -60,6 +63,14 @@ void createAndWriteToFile(std::string filename);
 // If the source file doesn't exist, or the destinations's directory doesn't
 // exist, this will print an error.
 void copyFileToFile(std::string source, std::string dest);
+
+// Changes moves to the specified path. This supports both absolute and
+// relative paths.
+void moveToDirectory(std::string path);
+
+// Copies all files and directories from the source directory
+// to the destination directory
+void copyDirectory(const char* source, const char* dest);
 
 namespace Util {
     bool isStringEmpty(std::string& string) {
@@ -129,7 +140,7 @@ namespace Util {
                 }
             }
 
-            char cwd[512];
+            char cwd[MAX_PATH_LENGTH];
             getcwd(cwd, sizeof(cwd));
 
             std::cout << "mysh: History saved to " << cwd << "/" << HISTORY_FILE_NAME << std::endl;
@@ -167,6 +178,7 @@ int main() {
     VALID_COMMANDS.insert("background");
     VALID_COMMANDS.insert("byebye");
     VALID_COMMANDS.insert("coppy");
+    VALID_COMMANDS.insert("coppyabode");
     VALID_COMMANDS.insert("dwelt");
     VALID_COMMANDS.insert("history");
     VALID_COMMANDS.insert("maik");
@@ -184,7 +196,15 @@ int main() {
     std::vector<std::string> history = Util::loadHistory();
 
     while (line != "byebye") {
+#ifdef DEBUG
+        char cwd[MAX_PATH_LENGTH];
+        getcwd(cwd, sizeof(cwd));
+        std::cout << "[" << cwd << "]"
+                  << " # ";
+#else
         std::cout << "# ";
+#endif
+
         // Need to use std::getline instead of std::cin because cin skips spaces
         std::getline(std::cin, line, '\n');
         std::vector<std::string> tokens = Util::splitString(line, ' ');
@@ -274,7 +294,11 @@ void parseCommand(
     }
 
     if (command == "movetodir") {
-        // TODO
+        if (args.size() < 1) {
+            std::cerr << "mysh: Missing argument [directory]" << std::endl;
+        } else {
+            moveToDirectory(args[0]);
+        }
     }
 
     if (command == "dwelt") {
@@ -298,6 +322,14 @@ void parseCommand(
             std::cerr << "mysh: Usage: coppy [source] [destination]" << std::endl;
         } else {
             copyFileToFile(args[0], args[1]);
+        }
+    }
+
+    if (command == "coppyabode") {
+        if (args.size() < 2) {
+            std::cerr << "mysh: Usage: coppyabode [source-dir] [target-dir]" << std::endl;
+        } else {
+            copyDirectory(args[0].c_str(), args[1].c_str());
         }
     }
 }
@@ -467,7 +499,7 @@ void createAndWriteToFile(std::string filename) {
         return;
     }
 
-    char cwd[512];
+    char cwd[MAX_PATH_LENGTH];
     getcwd(cwd, sizeof(cwd));
 
     try {
@@ -522,4 +554,66 @@ void copyFileToFile(std::string source, std::string dest) {
     } catch (const std::exception& err) {
         std::cout << "mysh: Error copying file: " << err.what() << std::endl;
     }
+}
+
+void moveToDirectory(std::string path) {
+    if (!Util::isDirectory(path)) {
+        std::cerr << "mysh: " << path << " is not a directory" << std::endl;
+        return;
+    }
+
+    chdir(path.c_str());
+}
+
+void copyDirectory(const char* source, const char* dest) {
+    if (!Util::isDirectory(std::string(source))) {
+        std::cerr << "mysh: " << source << " is not a directory" << std::endl;
+        return;
+    }
+
+    DIR* directory = opendir(source);
+    struct dirent* dir;
+    char sourceBuffer[MAX_PATH_LENGTH];
+    char destBuffer[MAX_PATH_LENGTH];
+
+    if (!directory) {
+        std::cerr << "mysh: Unable to open directory " << source << std::endl;
+        return;
+    }
+
+    if (!Util::isDirectory(std::string(dest)) && mkdir(dest, S_IRWXU | S_IRWXG | S_IRWXO) != 0) {
+        std::cout << "Error creating directory " << dest << " : " << std::strerror(errno) << std::endl;
+        closedir(directory);
+        return;
+    }
+
+    std::vector<std::string> parts = Util::splitString(std::string(dest), '/');
+    const char* baseDestPath = parts[0].c_str();
+
+    while ((dir = readdir(directory)) != NULL) {
+        if (strcmp(dir->d_name, ".") == 0 || strcmp(dir->d_name, "..") == 0 || strcmp(dir->d_name, dest) == 0) {
+            continue;
+        }
+
+        snprintf(sourceBuffer, sizeof(sourceBuffer), "%s%c%s", source, '/', dir->d_name);
+        snprintf(destBuffer, sizeof(destBuffer), "%s%c%s", dest, '/', dir->d_name);
+
+        switch (dir->d_type) {
+            case DT_REG:
+                if (!Util::doesFileOrDirExist(std::string(destBuffer))) {
+                    std::cout << "mysh: " << sourceBuffer << " => " << destBuffer << std::endl;
+                    copyFileToFile(sourceBuffer, destBuffer);
+                }
+                break;
+            case DT_DIR:
+                // Make sure we don't try to recursively copy the destination
+                // directory to the destination directory again.
+                if (strcmp(dir->d_name, baseDestPath) != 0) {
+                    copyDirectory(sourceBuffer, destBuffer);
+                }
+                break;
+        }
+    }
+
+    closedir(directory);
 }

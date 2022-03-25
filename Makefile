@@ -1,5 +1,5 @@
 CXX = g++ -std=c++98
-
+CPPFLAGS = -DDEBUG
 SRC = ./src/mysh.cpp
 ARGS = -Wall -Wtype-limits -Wextra
 BUILD_FOLDER = ./out/
@@ -7,7 +7,7 @@ EXE_NAME = mysh
 
 all: $(SRC)
 	@ mkdir -p $(BUILD_FOLDER)
-	@ $(CXX) $(SRC) -o $(BUILD_FOLDER)$(EXE_NAME) $(ARGS)
+	@ $(CXX) $(SRC) -o $(BUILD_FOLDER)$(EXE_NAME) $(CPPFLAGS) $(ARGS)
 
 version-check:
 	@ g++ ./src/version_check.cpp -o version_check
