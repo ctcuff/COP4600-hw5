@@ -20,6 +20,7 @@
 #define HISTORY_FILE_PATH "./" HISTORY_FILE_NAME
 #define MAX_PATH_LENGTH 512
 
+// Stores all PIDs created by the start and background commands
 std::set<pid_t> activePids;
 std::set<std::string> VALID_COMMANDS;
 
@@ -45,18 +46,19 @@ void executeStartCommand(const std::vector<std::string>& args, bool background);
 // that are passed to that program and starts n processes of that program
 void executeRepeatCommand(const std::vector<std::string>& args);
 
+// Terminates the process with the given PID.
 // Returns true if the process was terminated successfully
 bool terminateProcess(pid_t pid);
 
 void terminateAllProcesses();
 
 // Takes a path and checks if that path is a file or directory. If the path
-// is a file, this function will print `Dwelt indeed`. If the path a directory,
-// this function will print `Abode is`. If the path doesn't exist, this function
-// will print `Dwelt not`.
+// is a file, this function will print "Dwelt indeed". If the path a directory,
+// this function will print "Abode is". If the path doesn't exist, this function
+// will print "Dwelt not".
 void checkFileOrDirectory(std::string path);
 
-// Takes a file name, creates that file, and writes the word `Draft` into it.
+// Takes a file name, creates that file, and writes the word "Draft" into it.
 // If the file already exists, this will print an error.
 void createAndWriteToFile(std::string filename);
 
@@ -65,15 +67,17 @@ void createAndWriteToFile(std::string filename);
 // exist, this will print an error.
 void copyFileToFile(std::string source, std::string dest);
 
-// Changes moves to the specified path. This supports both absolute and
-// relative paths.
+// Causes "path" to become the current working directory.
+// This supports both absolute and relative paths.
 void moveToDirectory(std::string path);
 
-// Copies all files and directories from the source directory
+// Recursively copies all files and and sub-directories from the source directory
 // to the destination directory
 void copyDirectory(const char* source, const char* dest);
 
 namespace Util {
+    // Takes a string and returns true if that string's length is 0
+    // or if the string contains only spaces
     bool isStringEmpty(std::string& string) {
         if (string.empty()) {
             return true;
@@ -88,6 +92,8 @@ namespace Util {
         return true;
     }
 
+    // Takes a string and a character delimiter and splits that string into
+    // a vector based on the delimiter.
     std::vector<std::string> splitString(const std::string& string, const char delimiter) {
         std::vector<std::string> tokens = std::vector<std::string>();
         std::string token;
@@ -130,6 +136,9 @@ namespace Util {
         return S_ISDIR(pathStat.st_mode) == 1;
     }
 
+    // Saves the current shell's history to the history file (this
+    // will append new history to the end). Returns 0 if successful and
+    // -1 if an error occurred.
     int writeHistory(const std::vector<std::string>& history) {
         try {
             std::ofstream file;
@@ -154,6 +163,7 @@ namespace Util {
         return 0;
     }
 
+    // Loads all history from the history file (if present) into a string vector.
     std::vector<std::string> loadHistory() {
         std::vector<std::string> history = std::vector<std::string>();
 
@@ -370,7 +380,7 @@ void executeReplayCommand(const std::vector<std::string>& history, const int ind
     }
 
     // Need to subtract 2 here because "replay" will be added to the history
-    // before the command is run, and we need to get the command that was executed
+    // before the command is run and we need to get the command that was executed
     // at position index - 1.
     std::string command = history[history.size() - index - 2];
     std::vector<std::string> tokens = Util::splitString(command, ' ');
@@ -594,7 +604,10 @@ void copyDirectory(const char* source, const char* dest) {
     const char* baseDestPath = parts[0].c_str();
 
     while ((dir = readdir(directory)) != NULL) {
-        if (strcmp(dir->d_name, ".") == 0 || strcmp(dir->d_name, "..") == 0 || strcmp(dir->d_name, dest) == 0) {
+        if (
+            strcmp(dir->d_name, ".") == 0 ||
+            strcmp(dir->d_name, "..") == 0 ||
+            strcmp(dir->d_name, dest) == 0) {
             continue;
         }
 
@@ -602,13 +615,13 @@ void copyDirectory(const char* source, const char* dest) {
         snprintf(destBuffer, sizeof(destBuffer), "%s%c%s", dest, '/', dir->d_name);
 
         switch (dir->d_type) {
-            case DT_REG:
+            case DT_REG: // File
                 if (!Util::doesFileOrDirExist(std::string(destBuffer))) {
                     std::cout << "mysh: " << sourceBuffer << " => " << destBuffer << std::endl;
                     copyFileToFile(sourceBuffer, destBuffer);
                 }
                 break;
-            case DT_DIR:
+            case DT_DIR: // Directory
                 // Make sure we don't try to recursively copy the destination
                 // directory to the destination directory again.
                 if (strcmp(dir->d_name, baseDestPath) != 0) {
