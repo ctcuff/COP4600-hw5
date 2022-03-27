@@ -48,7 +48,7 @@ void executeRepeatCommand(const std::vector<std::string>& args);
 
 // Terminates the process with the given PID.
 // Returns true if the process was terminated successfully
-bool terminateProcess(pid_t pid);
+bool terminateProcess(const pid_t pid);
 
 void terminateAllProcesses();
 
@@ -56,29 +56,29 @@ void terminateAllProcesses();
 // is a file, this function will print "Dwelt indeed". If the path a directory,
 // this function will print "Abode is". If the path doesn't exist, this function
 // will print "Dwelt not".
-void checkFileOrDirectory(std::string path);
+void checkFileOrDirectory(const std::string& path);
 
 // Takes a file name, creates that file, and writes the word "Draft" into it.
 // If the file already exists, this will print an error.
-void createAndWriteToFile(std::string filename);
+void createAndWriteToFile(const std::string& filename);
 
 // Takes the path to a source file and copies the contents to the dest file.
-// If the source file doesn't exist, or the destinations's directory doesn't
+// If the source file doesn't exist, or the destination's directory doesn't
 // exist, this will print an error.
-void copyFileToFile(std::string source, std::string dest);
+void copyFileToFile(const std::string& source, const std::string& dest);
 
 // Causes "path" to become the current working directory.
 // This supports both absolute and relative paths.
-void moveToDirectory(std::string path);
+void moveToDirectory(const std::string& path);
 
-// Recursively copies all files and and sub-directories from the source directory
+// Recursively copies all files and subdirectories from the source directory
 // to the destination directory
 void copyDirectory(const char* source, const char* dest);
 
 namespace Util {
     // Takes a string and returns true if that string's length is 0
     // or if the string contains only spaces
-    bool isStringEmpty(std::string& string) {
+    bool isStringEmpty(const std::string& string) {
         if (string.empty()) {
             return true;
         }
@@ -184,7 +184,7 @@ namespace Util {
         return history;
     }
 
-    bool isValidNumber(std::string input) {
+    bool isValidNumber(const std::string& input) {
         for (int i = 0; i < static_cast<int>(input.size()); i++) {
             if (isdigit(input[i]) == 0) {
                 return false;
@@ -316,7 +316,7 @@ void parseCommand(
     }
 
     if (command == "movetodir") {
-        if (args.size() < 1) {
+        if (args.empty()) {
             std::cerr << "mysh: Missing argument [directory]" << std::endl;
         } else {
             moveToDirectory(args[0]);
@@ -324,7 +324,7 @@ void parseCommand(
     }
 
     if (command == "dwelt") {
-        if (args.size() < 1) {
+        if (args.empty()) {
             std::cerr << "mysh: Missing argument [file | directory]" << std::endl;
         } else {
             checkFileOrDirectory(args[0]);
@@ -332,7 +332,7 @@ void parseCommand(
     }
 
     if (command == "maik") {
-        if (args.size() < 1) {
+        if (args.empty()) {
             std::cerr << "mysh: Missing argument [filename]" << std::endl;
         } else {
             createAndWriteToFile(args[0]);
@@ -380,7 +380,7 @@ void executeReplayCommand(const std::vector<std::string>& history, const int ind
     }
 
     // Need to subtract 2 here because "replay" will be added to the history
-    // before the command is run and we need to get the command that was executed
+    // before the command is run, and we need to get the command that was executed
     // at position index - 1.
     std::string command = history[history.size() - index - 2];
     std::vector<std::string> tokens = Util::splitString(command, ' ');
@@ -496,7 +496,7 @@ void terminateAllProcesses() {
               << std::endl;
 }
 
-void checkFileOrDirectory(std::string path) {
+void checkFileOrDirectory(const std::string& path) {
     if (!Util::doesFileOrDirExist(path)) {
         std::cout << "mysh: Dwelt not." << std::endl;
     } else if (Util::isFile(path)) {
@@ -506,7 +506,7 @@ void checkFileOrDirectory(std::string path) {
     }
 }
 
-void createAndWriteToFile(std::string filename) {
+void createAndWriteToFile(const std::string& filename) {
     if (Util::doesFileOrDirExist(filename)) {
         std::cerr << "mysh: " << filename << " already exists." << std::endl;
         return;
@@ -527,7 +527,7 @@ void createAndWriteToFile(std::string filename) {
     }
 }
 
-void copyFileToFile(std::string source, std::string dest) {
+void copyFileToFile(const std::string& source, const std::string& dest) {
     if (!Util::doesFileOrDirExist(source)) {
         std::cerr << "mysh: Source file " << source << " doesn't exist" << std::endl;
         return;
@@ -569,7 +569,7 @@ void copyFileToFile(std::string source, std::string dest) {
     }
 }
 
-void moveToDirectory(std::string path) {
+void moveToDirectory(const std::string& path) {
     if (!Util::isDirectory(path)) {
         std::cerr << "mysh: " << path << " is not a directory" << std::endl;
         return;
