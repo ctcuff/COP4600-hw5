@@ -11,3 +11,4 @@ NamespaceIndentation: All
 ReferenceAlignment: Left
 PointerAlignment: Left
 FixNamespaceComments: false
+AlignConsecutiveMacros: AcrossEmptyLines

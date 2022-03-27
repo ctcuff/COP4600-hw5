@@ -18,7 +18,14 @@
 
 #define HISTORY_FILE_NAME "mysh.history"
 #define HISTORY_FILE_PATH "./" HISTORY_FILE_NAME
-#define MAX_PATH_LENGTH 512
+#define MAX_PATH_LENGTH   512
+
+// Used to print in color in debug mode
+#ifdef DEBUG
+#define BLUE  "\x1B[34m"
+#define GREEN "\x1B[32m"
+#define RESET "\x1B[0m"
+#endif
 
 // Stores all PIDs created by the start and background commands
 std::set<pid_t> activePids;
@@ -76,6 +83,12 @@ void moveToDirectory(const std::string& path);
 void copyDirectory(const char* source, const char* dest);
 
 namespace Util {
+    char* getCurrentDir() {
+        static char cwd[MAX_PATH_LENGTH];
+        getcwd(cwd, sizeof(cwd));
+        return cwd;
+    }
+
     // Takes a string and returns true if that string's length is 0
     // or if the string contains only spaces
     bool isStringEmpty(const std::string& string) {
@@ -108,10 +121,13 @@ namespace Util {
         return tokens;
     }
 
+    // Takes a path and returns true if that path points
+    // to a file or directory that exists.
     bool doesFileOrDirExist(const std::string& path) {
         return access(path.c_str(), F_OK) != -1;
     }
 
+    // Takes a path and returns true if that path points to a file that exists.
     bool isFile(const std::string& path) {
         if (!Util::doesFileOrDirExist(path)) {
             return false;
@@ -124,6 +140,7 @@ namespace Util {
         return S_ISREG(pathStat.st_mode) == 1;
     }
 
+    // Takes a path and returns true if that path points to a directory that exists.
     bool isDirectory(const std::string& path) {
         if (!Util::doesFileOrDirExist(path)) {
             return false;
@@ -140,25 +157,22 @@ namespace Util {
     // will append new history to the end). Returns 0 if successful and
     // -1 if an error occurred.
     int writeHistory(const std::vector<std::string>& history) {
-        try {
-            std::ofstream file;
-            file.open(HISTORY_FILE_PATH);
+        std::ofstream historyFile;
+        historyFile.open(HISTORY_FILE_PATH);
 
-            for (int i = 0; i < static_cast<int>(history.size()); i++) {
-                if (history[i] != "byebye") {
-                    file << history[i] << std::endl;
-                }
-            }
-
-            char cwd[MAX_PATH_LENGTH];
-            getcwd(cwd, sizeof(cwd));
-
-            std::cout << "mysh: History saved to " << cwd << "/" << HISTORY_FILE_NAME << std::endl;
-            file.close();
-        } catch (const std::exception& err) {
-            std::cout << "mysh: Error writing to history file " << err.what() << std::endl;
+        if (!historyFile.is_open()) {
+            std::cout << "mysh: Couldn't save history file: " << std::strerror(errno) << std::endl;
             return -1;
         }
+
+        for (int i = 0; i < static_cast<int>(history.size()); i++) {
+            if (history[i] != "byebye") {
+                historyFile << history[i] << std::endl;
+            }
+        }
+
+        std::cout << "mysh: History saved to " << Util::getCurrentDir() << "/" << HISTORY_FILE_NAME << std::endl;
+        historyFile.close();
 
         return 0;
     }
@@ -166,24 +180,26 @@ namespace Util {
     // Loads all history from the history file (if present) into a string vector.
     std::vector<std::string> loadHistory() {
         std::vector<std::string> history = std::vector<std::string>();
-
-        std::ifstream file;
+        std::ifstream historyFile;
         std::string line;
-        file.open(HISTORY_FILE_PATH, std::ios_base::in);
 
-        if (file.fail()) {
+        historyFile.open(HISTORY_FILE_PATH, std::ios_base::in);
+
+        if (historyFile.fail()) {
             return history;
         }
 
-        while (std::getline(file, line, '\n')) {
+        while (std::getline(historyFile, line, '\n')) {
             history.push_back(line);
         }
 
-        file.close();
+        historyFile.close();
 
         return history;
     }
 
+    // Takes a string and returns true if that string can be parsed
+    // to a valid integer.
     bool isValidNumber(const std::string& input) {
         for (int i = 0; i < static_cast<int>(input.size()); i++) {
             if (isdigit(input[i]) == 0) {
@@ -217,10 +233,8 @@ int main() {
 
     while (line != "byebye") {
 #ifdef DEBUG
-        char cwd[MAX_PATH_LENGTH];
-        getcwd(cwd, sizeof(cwd));
-        std::cout << "[" << cwd << "]"
-                  << " # ";
+        std::cout << GREEN "[" << Util::getCurrentDir() << "]"
+                  << BLUE " # " RESET;
 #else
         std::cout << "# ";
 #endif
@@ -350,9 +364,18 @@ void parseCommand(
     if (command == "coppyabode") {
         if (args.size() < 2) {
             std::cerr << "mysh: Usage: coppyabode [source-dir] [target-dir]" << std::endl;
-        } else {
-            copyDirectory(args[0].c_str(), args[1].c_str());
+            return;
         }
+
+        const char* source = args[0].c_str();
+        const char* dest = args[1].c_str();
+
+        if (Util::isDirectory(std::string(source)) && strcmp(source, dest) == 0) {
+            std::cerr << "mysh: Cannot copy '" << source << "' into itself" << std::endl;
+            return;
+        }
+
+        copyDirectory(source, dest);
     }
 }
 
@@ -512,75 +535,79 @@ void createAndWriteToFile(const std::string& filename) {
         return;
     }
 
-    char cwd[MAX_PATH_LENGTH];
-    getcwd(cwd, sizeof(cwd));
+    std::ofstream file;
+    file.open(filename.c_str());
 
-    try {
-        std::ofstream file;
-        file.open(filename.c_str());
-        file << "Draft\n";
-        file.close();
-
-        std::cout << "mysh: File saved to " << cwd << "/" << filename << std::endl;
-    } catch (const std::exception& err) {
-        std::cout << "mysh: Error writing to " << filename << " " << err.what() << std::endl;
-    }
-}
-
-void copyFileToFile(const std::string& source, const std::string& dest) {
-    if (!Util::doesFileOrDirExist(source)) {
-        std::cerr << "mysh: Source file " << source << " doesn't exist" << std::endl;
+    if (!file.is_open()) {
+        std::cout << "mysh: " << filename << ": " << std::strerror(errno) << std::endl;
         return;
     }
 
-    if (Util::isDirectory(source)) {
-        std::cerr << "mysh: " << source << " is a directory" << std::endl;
+    file << "Draft\n";
+    file.close();
+}
+
+void copyFileToFile(const std::string& source, const std::string& dest) {
+    if (!Util::doesFileOrDirExist(source) || Util::isDirectory(source)) {
+        std::cerr << "mysh: " << source << ": No such file" << std::endl;
         return;
     }
 
     if (Util::isDirectory(dest)) {
-        std::cerr << "mysh: " << dest << " is already a directory" << std::endl;
+        std::cerr << "mysh: " << dest << ": Destination cannot be a directory" << std::endl;
         return;
     }
 
     if (Util::isFile(dest)) {
-        std::cerr << "mysh: " << dest << " is already a file" << std::endl;
+        std::cerr << "mysh: " << dest << ": File already exists" << std::endl;
         return;
     }
 
-    try {
-        std::ifstream sourceFile;
-        std::ofstream destFile;
-        std::string content;
+    std::ifstream sourceFile;
+    std::ofstream destFile;
+    std::string content;
 
-        sourceFile.open(source.c_str());
-        destFile.open(dest.c_str());
+    sourceFile.open(source.c_str());
 
-        if (sourceFile.is_open() && destFile.is_open()) {
-            while (std::getline(sourceFile, content, '\n')) {
-                destFile << content << "\n";
-            }
-        }
-
-        destFile.close();
-        sourceFile.close();
-    } catch (const std::exception& err) {
-        std::cout << "mysh: Error copying file: " << err.what() << std::endl;
+    if (!sourceFile.is_open()) {
+        std::cerr << "mysh: " << source << ": " << std::strerror(errno) << std::endl;
+        return;
     }
+
+    destFile.open(dest.c_str());
+
+    if (!destFile.is_open()) {
+        std::cerr << "mysh: " << dest << ": " << std::strerror(errno) << std::endl;
+        sourceFile.close();
+        return;
+    }
+
+    if (sourceFile.is_open() && destFile.is_open()) {
+        while (std::getline(sourceFile, content, '\n')) {
+            destFile << content << "\n";
+        }
+    }
+
+    destFile.close();
+    sourceFile.close();
 }
 
 void moveToDirectory(const std::string& path) {
     if (!Util::isDirectory(path)) {
-        std::cerr << "mysh: " << path << " is not a directory" << std::endl;
+        std::cerr << "mysh: " << path << ": Not a directory" << std::endl;
         return;
     }
 
-    chdir(path.c_str());
+    int errorCode = chdir(path.c_str());
+
+    if (errorCode == -1) {
+        std::cout << "mysh: " << std::strerror(errno) << std::endl;
+    }
 }
 
 void copyDirectory(const char* source, const char* dest) {
     if (!Util::isDirectory(std::string(source))) {
-        std::cerr << "mysh: " << source << " is not a directory" << std::endl;
+        std::cerr << "mysh: " << source << ": Not a directory" << std::endl;
         return;
     }
 
@@ -590,12 +617,12 @@ void copyDirectory(const char* source, const char* dest) {
     char destBuffer[MAX_PATH_LENGTH];
 
     if (!directory) {
-        std::cerr << "mysh: Unable to open directory " << source << std::endl;
+        std::cerr << "mysh: " << source << ": " << std::strerror(errno) << std::endl;
         return;
     }
 
     if (!Util::isDirectory(std::string(dest)) && mkdir(dest, S_IRWXU | S_IRWXG | S_IRWXO) != 0) {
-        std::cout << "Error creating directory " << dest << " : " << std::strerror(errno) << std::endl;
+        std::cout << "mysh: " << dest << " : " << std::strerror(errno) << std::endl;
         closedir(directory);
         return;
     }
