@@ -10,7 +10,7 @@ all: $(SRC)
 	@ $(CXX) $(SRC) -o $(BUILD_FOLDER)$(EXE_NAME) $(CPPFLAGS) $(ARGS)
 
 version-check:
-	@ g++ ./src/version_check.cpp -o version_check
+	@ $(CXX) ./src/version_check.cpp -o version_check
 	@ ./version_check && rm ./version_check
 
 run:

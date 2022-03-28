@@ -39,19 +39,19 @@ void parseCommand(
 // If no arguments are passed, this prints all history (current application history plus the
 // history saved in mysh.history). If "-c" is passed, all history will be cleared (including
 // this history in the history file).
-void executeHistoryCommand(std::vector<std::string>& history, const std::vector<std::string>& args);
+void showHistory(std::vector<std::string>& history, const std::vector<std::string>& args);
 
 // Re-executes the command at the given number in history.
-void executeReplayCommand(const std::vector<std::string>& history, int index);
+void replayCommand(const std::vector<std::string>& history, int index);
 
 // If the parameter background is true, this will start the specified program and return
 // execution back to this program. Otherwise, execution will halt until the given
 // program finishes executing.
-void executeStartCommand(const std::vector<std::string>& args, bool background);
+void startProgram(const std::vector<std::string>& args, bool background);
 
 // Takes a program name, number of repetitions, and (optionally) additional arguments
 // that are passed to that program and starts n processes of that program
-void executeRepeatCommand(const std::vector<std::string>& args);
+void repeatCommand(const std::vector<std::string>& args);
 
 // Terminates the process with the given PID.
 // Returns true if the process was terminated successfully
@@ -71,8 +71,9 @@ void createAndWriteToFile(const std::string& filename);
 
 // Takes the path to a source file and copies the contents to the dest file.
 // If the source file doesn't exist, or the destination's directory doesn't
-// exist, this will print an error.
-void copyFileToFile(const std::string& source, const std::string& dest);
+// exist, this will print an error. If force is true, the file in the
+// destination path will be overriden if it already exists.
+void copyFileToFile(const std::string& source, const std::string& dest, const bool force);
 
 // Causes "path" to become the current working directory.
 // This supports both absolute and relative paths.
@@ -161,7 +162,7 @@ namespace Util {
         historyFile.open(HISTORY_FILE_PATH);
 
         if (!historyFile.is_open()) {
-            std::cout << "mysh: Couldn't save history file: " << std::strerror(errno) << std::endl;
+            std::cerr << "mysh: Couldn't save history file: " << std::strerror(errno) << std::endl;
             return -1;
         }
 
@@ -274,7 +275,7 @@ void parseCommand(
             return;
         }
 
-        executeStartCommand(args, command == "background");
+        startProgram(args, command == "background");
     }
 
     if (command == "byebye") {
@@ -282,7 +283,7 @@ void parseCommand(
     }
 
     if (command == "history") {
-        executeHistoryCommand(const_cast<std::vector<std::string>&>(history), args);
+        showHistory(const_cast<std::vector<std::string>&>(history), args);
     }
 
     if (command == "repeat") {
@@ -291,7 +292,7 @@ void parseCommand(
             return;
         }
 
-        executeRepeatCommand(args);
+        repeatCommand(args);
     }
 
     if (command == "replay") {
@@ -303,7 +304,7 @@ void parseCommand(
         if (!Util::isValidNumber(args[0])) {
             std::cerr << "mysh: Argument must be a number" << std::endl;
         } else {
-            executeReplayCommand(history, atoi(args[0].c_str()));
+            replayCommand(history, atoi(args[0].c_str()));
         }
     }
 
@@ -357,7 +358,7 @@ void parseCommand(
         if (args.size() < 2) {
             std::cerr << "mysh: Usage: coppy [source] [destination]" << std::endl;
         } else {
-            copyFileToFile(args[0], args[1]);
+            copyFileToFile(args[0], args[1], false);
         }
     }
 
@@ -379,7 +380,7 @@ void parseCommand(
     }
 }
 
-void executeHistoryCommand(std::vector<std::string>& history, const std::vector<std::string>& args) {
+void showHistory(std::vector<std::string>& history, const std::vector<std::string>& args) {
     int historySize = static_cast<int>(history.size());
 
     if (args.empty()) {
@@ -396,7 +397,7 @@ void executeHistoryCommand(std::vector<std::string>& history, const std::vector<
     }
 }
 
-void executeReplayCommand(const std::vector<std::string>& history, const int index) {
+void replayCommand(const std::vector<std::string>& history, const int index) {
     if (index == static_cast<int>(history.size())) {
         std::cerr << "mysh: Index out of range" << std::endl;
         return;
@@ -417,7 +418,7 @@ void executeReplayCommand(const std::vector<std::string>& history, const int ind
     }
 }
 
-void executeStartCommand(const std::vector<std::string>& args, bool background) {
+void startProgram(const std::vector<std::string>& args, bool background) {
     // Check if the file exists before running, so we don't unnecessarily fork
     if (!Util::doesFileOrDirExist(args[0])) {
         std::cerr << "mysh: " << args[0] << ": No such file or directory" << std::endl;
@@ -484,7 +485,7 @@ bool terminateProcess(const pid_t pid) {
     return true;
 }
 
-void executeRepeatCommand(const std::vector<std::string>& args) {
+void repeatCommand(const std::vector<std::string>& args) {
     std::vector<std::string> command = std::vector<std::string>(args.begin() + 1, args.end());
 
     if (!Util::isValidNumber(args[0])) {
@@ -495,7 +496,7 @@ void executeRepeatCommand(const std::vector<std::string>& args) {
     int repetitions = atoi(args[0].c_str());
 
     for (int i = 0; i < repetitions; i++) {
-        executeStartCommand(command, true);
+        startProgram(command, true);
     }
 }
 
@@ -521,11 +522,11 @@ void terminateAllProcesses() {
 
 void checkFileOrDirectory(const std::string& path) {
     if (!Util::doesFileOrDirExist(path)) {
-        std::cout << "mysh: Dwelt not." << std::endl;
+        std::cout << "Dwelt not." << std::endl;
     } else if (Util::isFile(path)) {
-        std::cout << "mysh: Dwelt indeed" << std::endl;
+        std::cout << "Dwelt indeed." << std::endl;
     } else if (Util::isDirectory(path)) {
-        std::cout << "mysh: Abode is." << std::endl;
+        std::cout << "Abode is." << std::endl;
     }
 }
 
@@ -539,7 +540,7 @@ void createAndWriteToFile(const std::string& filename) {
     file.open(filename.c_str());
 
     if (!file.is_open()) {
-        std::cout << "mysh: " << filename << ": " << std::strerror(errno) << std::endl;
+        std::cerr << "mysh: " << filename << ": " << std::strerror(errno) << std::endl;
         return;
     }
 
@@ -547,7 +548,7 @@ void createAndWriteToFile(const std::string& filename) {
     file.close();
 }
 
-void copyFileToFile(const std::string& source, const std::string& dest) {
+void copyFileToFile(const std::string& source, const std::string& dest, const bool force) {
     if (!Util::doesFileOrDirExist(source) || Util::isDirectory(source)) {
         std::cerr << "mysh: " << source << ": No such file" << std::endl;
         return;
@@ -558,7 +559,7 @@ void copyFileToFile(const std::string& source, const std::string& dest) {
         return;
     }
 
-    if (Util::isFile(dest)) {
+    if (!force && Util::isFile(dest)) {
         std::cerr << "mysh: " << dest << ": File already exists" << std::endl;
         return;
     }
@@ -601,7 +602,7 @@ void moveToDirectory(const std::string& path) {
     int errorCode = chdir(path.c_str());
 
     if (errorCode == -1) {
-        std::cout << "mysh: " << std::strerror(errno) << std::endl;
+        std::cerr << "mysh: " << std::strerror(errno) << std::endl;
     }
 }
 
@@ -622,7 +623,7 @@ void copyDirectory(const char* source, const char* dest) {
     }
 
     if (!Util::isDirectory(std::string(dest)) && mkdir(dest, S_IRWXU | S_IRWXG | S_IRWXO) != 0) {
-        std::cout << "mysh: " << dest << " : " << std::strerror(errno) << std::endl;
+        std::cerr << "mysh: " << dest << " : " << std::strerror(errno) << std::endl;
         closedir(directory);
         return;
     }
@@ -643,10 +644,8 @@ void copyDirectory(const char* source, const char* dest) {
 
         switch (dir->d_type) {
             case DT_REG: // File
-                if (!Util::doesFileOrDirExist(std::string(destBuffer))) {
-                    std::cout << "mysh: " << sourceBuffer << " => " << destBuffer << std::endl;
-                    copyFileToFile(sourceBuffer, destBuffer);
-                }
+                std::cout << "mysh: " << sourceBuffer << " => " << destBuffer << std::endl;
+                copyFileToFile(sourceBuffer, destBuffer, true);
                 break;
             case DT_DIR: // Directory
                 // Make sure we don't try to recursively copy the destination
