@@ -498,6 +498,11 @@ void repeatCommand(const std::vector<std::string>& args) {
     for (int i = 0; i < repetitions; i++) {
         startProgram(command, true);
     }
+
+    // Using sleep here because spawning a large number of processess
+    // can sometimes cause the terminal to display warning messages
+    // that mess up this program's prompt
+    sleep(1);
 }
 
 void terminateAllProcesses() {
