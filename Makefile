@@ -13,6 +13,9 @@ version-check:
 	@ $(CXX) ./src/version_check.cpp -o version_check
 	@ ./version_check && rm ./version_check
 
+spin:
+	@ $(CXX) ./src/spin.cpp -o $(BUILD_FOLDER)/spin
+
 run:
 	@ make all && cd $(BUILD_FOLDER) && ./$(EXE_NAME)
 
