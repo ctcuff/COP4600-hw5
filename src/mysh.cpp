@@ -135,9 +135,7 @@ namespace Util {
         }
 
         struct stat pathStat;
-
         stat(path.c_str(), &pathStat);
-
         return S_ISREG(pathStat.st_mode) == 1;
     }
 
@@ -148,9 +146,7 @@ namespace Util {
         }
 
         struct stat pathStat;
-
         stat(path.c_str(), &pathStat);
-
         return S_ISDIR(pathStat.st_mode) == 1;
     }
 
@@ -368,15 +364,25 @@ void parseCommand(
             return;
         }
 
-        const char* source = args[0].c_str();
-        const char* dest = args[1].c_str();
+        std::string source = args[0];
+        std::string dest = args[1];
 
-        if (Util::isDirectory(std::string(source)) && strcmp(source, dest) == 0) {
+        // Need to replace any leading "./" because it causes the copyDirectory
+        // function to recurse into the dest directory and copy infinitely
+        if (source.find("./", 0) == 0) {
+            source = source.replace(0, 2, "");
+        }
+
+        if (dest.find("./", 0) == 0) {
+            dest = dest.replace(0, 2, "");
+        }
+
+        if (Util::isDirectory(source) && strcmp(source.c_str(), dest.c_str()) == 0) {
             std::cerr << "mysh: Cannot copy '" << source << "' into itself" << std::endl;
             return;
         }
 
-        copyDirectory(source, dest);
+        copyDirectory(source.c_str(), dest.c_str());
     }
 }
 
